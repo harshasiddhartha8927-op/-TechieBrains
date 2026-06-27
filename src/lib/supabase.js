@@ -479,6 +479,15 @@ export async function deleteContactMessage(id) {
   localStorage.setItem('tb-contact-messages', JSON.stringify(filtered));
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read resume file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export async function uploadResume({ user, profile, file }) {
   if (!file) throw new Error('Please choose a resume file.');
   if (!/\.(pdf|doc|docx)$/i.test(file.name)) throw new Error('Upload PDF, DOC, or DOCX only.');
@@ -522,9 +531,9 @@ export async function uploadResume({ user, profile, file }) {
     return payload;
   }
   
-  const objectUrl = URL.createObjectURL(file);
+  const dataUrl = await fileToDataUrl(file);
   const fileCache = JSON.parse(sessionStorage.getItem('tb-resume-files') || '{}');
-  fileCache[storagePath] = { name: file.name, type: file.type, url: objectUrl };
+  fileCache[storagePath] = { name: file.name, type: file.type, url: dataUrl };
   sessionStorage.setItem('tb-resume-files', JSON.stringify(fileCache));
 
   const resumes = getResumes();
@@ -535,7 +544,7 @@ export async function uploadResume({ user, profile, file }) {
     email: profile?.email || user.email,
     resume_path: storagePath,
     resume_file_name: cleanName,
-    resume_url: objectUrl,
+    resume_url: dataUrl,
     status: 'Pending',
     uploaded_at: new Date().toISOString()
   };
