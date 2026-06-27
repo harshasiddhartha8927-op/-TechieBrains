@@ -37,3 +37,5 @@ A client-ready React 19 + Vite website for Techie Brains Inc. covering recruitme
 ## Demo mode
 
 If Supabase env vars are missing, the app still allows local demo login so the client can review screens and button behavior. For final delivery, configure Supabase before deployment.
+
+# -TechieBrains
