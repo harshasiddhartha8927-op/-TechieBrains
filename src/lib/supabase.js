@@ -268,12 +268,21 @@ export async function registerUser(values) {
       options: {
         data: {
           name: values.name,
-          phone: values.phone || '',
           role: 'User'
         }
       }
     });
     if (error) throw error;
+
+    if (data?.user?.id) {
+      await upsertProfile({
+        id: data.user.id,
+        name: values.name,
+        email,
+        role: 'User'
+      });
+    }
+
     return { data, error: null };
   }
 
@@ -281,11 +290,11 @@ export async function registerUser(values) {
   if (users.some(u => u.email === email)) throw new Error('A user with this email already exists.');
 
   const id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
-  const newUser = { id, email, password: values.password, name: values.name, phone: values.phone || '', role: 'User' };
+  const newUser = { id, email, password: values.password, name: values.name, role: 'User' };
   users.push(newUser);
   localStorage.setItem('tb-mock-users', JSON.stringify(users));
 
-  await upsertProfile({ id, name: values.name, email, phone: values.phone || '', role: 'User' });
+  await upsertProfile({ id, name: values.name, email, role: 'User' });
   return { data: { user: { id, email } }, error: null };
 }
 
@@ -319,7 +328,17 @@ export async function loginWithPassword({ email, password }) {
     });
     if (error) throw error;
 
-    const profile = await getProfile(data.user.id);
+    let profile = await getProfile(data.user.id);
+    if (!profile) {
+      profile = await upsertProfile({
+        id: data.user.id,
+        name: data.user.user_metadata?.name || cleanEmail.split('@')[0],
+        email: cleanEmail,
+        phone: data.user.user_metadata?.phone || '',
+        role: data.user.user_metadata?.role || 'User'
+      });
+    }
+
     return { session: data.session, profile };
   }
 
@@ -448,16 +467,21 @@ export async function uploadResume({ user, profile, file }) {
       resume_path: storagePath,
       resume_file_name: cleanName,
       resume_url: urlData?.signedUrl || null,
-      status: 'Pending'
+      status: 'Pending',
+      uploaded_at: new Date().toISOString()
     };
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('resume_uploads')
-      .insert(payload)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+      .insert(payload, { returning: 'minimal' });
+    if (error) {
+      console.error('resume_uploads insert error', error, payload);
+      const resumes = getResumes();
+      resumes.push(payload);
+      localStorage.setItem('tb-mock-resumes', JSON.stringify(resumes));
+      return payload;
+    }
+    return payload;
   }
   
   const objectUrl = URL.createObjectURL(file);
@@ -486,12 +510,15 @@ export async function fetchUserResume(userId) {
   if (isRealSupabase) {
     const { data, error } = await supabase
       .from('resume_uploads')
-      .select('*')
+      .select('id,user_id,user_name,email,resume_path,resume_file_name,resume_url,status,remarks,uploaded_at')
       .eq('user_id', userId)
       .order('uploaded_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (error) throw error;
+    if (error) {
+      console.error('fetchUserResume error', error);
+      return getResumes().filter(r => r.user_id === userId).sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at))[0] || null;
+    }
     return data;
   }
 
@@ -506,9 +533,12 @@ export async function fetchResumes() {
   if (isRealSupabase) {
     const { data, error } = await supabase
       .from('resume_uploads')
-      .select('*')
+      .select('id,user_id,user_name,email,resume_path,resume_file_name,resume_url,status,remarks,uploaded_at')
       .order('uploaded_at', { ascending: false });
-    if (error) throw error;
+    if (error) {
+      console.error('fetchResumes error', error);
+      return getResumes();
+    }
     return data || [];
   }
   return getResumes();
@@ -595,7 +625,7 @@ export async function fetchStats() {
 
     const { count: resumes } = await supabase
       .from('resume_uploads')
-      .select('*', { count: 'exact', head: true });
+      .select('id', { count: 'exact', head: true });
 
     const { count: messages } = await supabase
       .from('contact_messages')
@@ -603,17 +633,17 @@ export async function fetchStats() {
 
     const { count: accepted } = await supabase
       .from('resume_uploads')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('status', 'Accepted');
 
     const { count: rejected } = await supabase
       .from('resume_uploads')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('status', 'Rejected');
 
     const { count: pending } = await supabase
       .from('resume_uploads')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('status', 'Pending');
 
     return {

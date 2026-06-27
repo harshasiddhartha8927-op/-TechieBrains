@@ -226,7 +226,7 @@ function Contact() {
 
 function Login() {
   const navigate = useNavigate();
-  const { register, handleSubmit } = useForm();
+  const { register, handleSubmit, formState: { errors } } = useForm();
   const { setAuth, session, profile } = useAppStore();
   const [mode, setMode] = useState('login');
   const [busy, setBusy] = useState(false);
@@ -260,8 +260,9 @@ function Login() {
       }
       const result = await loginWithPassword(values);
       setAuth(result);
-      toast.success(result.profile.role === 'Admin' ? 'Admin signed in' : 'Welcome back');
-      navigate(result.profile.role === 'Admin' ? '/admin' : '/dashboard');
+      const role = result.profile?.role || 'User';
+      toast.success(role === 'Admin' ? 'Admin signed in' : 'Welcome back');
+      navigate(role === 'Admin' ? '/admin' : '/dashboard');
     } catch (error) {
       toast.error(error.message || 'Authentication failed');
     } finally {
@@ -269,7 +270,12 @@ function Login() {
     }
   };
 
-  return <motion.div {...page}><section className="auth-wrap"><Card className="auth-card"><img src="/techiebrains-logo.png" alt="Techie Brains" /><span className="pill"><Lock size={15} />Secure Access</span><h1>{mode === 'login' ? 'Account Login' : 'Create candidate account'}</h1><p className="auth-intro">{mode === 'login' ? 'Enter your credentials to access your dashboard.' : 'Register your candidate account to start uploading resumes and tracking applications.'}</p><form className="form" onSubmit={handleSubmit(submit)}>{mode === 'register' && <><input {...register('name', { required: true })} placeholder="Full name" /><input {...register('phone')} placeholder="Phone" /></>}<input type="email" {...register('email', { required: true })} placeholder="Email" /><input type="password" {...register('password', { required: true, ...(mode === 'register' ? { minLength: 8 } : {}) })} placeholder="Password" /><label className="check"><input type="checkbox" />Remember me</label><button className="gradient-btn" disabled={busy}>{busy ? 'Please wait...' : mode === 'register' ? 'Register' : 'Login'}</button></form><div className="auth-links" style={{ justifyContent: 'center', marginTop: '24px' }}>{mode === 'login' ? <p style={{ color: 'var(--muted)', margin: 0 }}>Don't have an account? <button type="button" onClick={() => setMode('register')} style={{ display: 'inline', padding: 0, border: 0, background: 'transparent', color: 'var(--accent)', fontWeight: 900, cursor: 'pointer' }}>Create Account</button></p> : <p style={{ color: 'var(--muted)', margin: 0 }}>Already have an account? <button type="button" onClick={() => setMode('login')} style={{ display: 'inline', padding: 0, border: 0, background: 'transparent', color: 'var(--accent)', fontWeight: 900, cursor: 'pointer' }}>Login</button></p>}</div><small>{supabaseConfigured ? 'Connected to Supabase authentication.' : 'Supabase keys are required for production login, resume upload, and admin access.'}</small></Card></section></motion.div>;
+  return <motion.div {...page}><section className="auth-wrap"><Card className="auth-card"><img src="/techiebrains-logo.png" alt="Techie Brains" /><span className="pill"><Lock size={15} />Secure Access</span><h1>{mode === 'login' ? 'Account Login' : 'Create candidate account'}</h1><p className="auth-intro">{mode === 'login' ? 'Enter your credentials to access your dashboard.' : 'Register your candidate account to start uploading resumes and tracking applications.'}</p><form className="form" onSubmit={handleSubmit(submit)}>{mode === 'register' && <><input {...register('name', { required: 'Full name is required' })} placeholder="Full name" />
+            {errors.name && <p className="field-error">{errors.name.message}</p>}</>}<input type="email" {...register('email', { required: 'Email is required' })} placeholder="Email" />
+            {errors.email && <p className="field-error">{errors.email.message}</p>}
+            <input type="password" {...register('password', { required: 'Password is required', ...(mode === 'register' ? { minLength: { value: 6, message: 'Password must be at least 6 characters' } } : {}) })} placeholder={mode === 'register' ? 'Create password' : 'Password'} />
+            {errors.password && <p className="field-error">{errors.password.message}</p>}
+            <label className="check"><input type="checkbox" />Remember me</label><button type="submit" className="gradient-btn" disabled={busy}>{busy ? 'Please wait...' : mode === 'register' ? 'Register' : 'Login'}</button></form><div className="auth-links" style={{ justifyContent: 'center', marginTop: '24px' }}>{mode === 'login' ? <p style={{ color: 'var(--muted)', margin: 0 }}>Don't have an account? <button type="button" onClick={() => setMode('register')} style={{ display: 'inline', padding: 0, border: 0, background: 'transparent', color: 'var(--accent)', fontWeight: 900, cursor: 'pointer' }}>Create Account</button></p> : <p style={{ color: 'var(--muted)', margin: 0 }}>Already have an account? <button type="button" onClick={() => setMode('login')} style={{ display: 'inline', padding: 0, border: 0, background: 'transparent', color: 'var(--accent)', fontWeight: 900, cursor: 'pointer' }}>Login</button></p>}</div><small>{supabaseConfigured ? 'Connected to Supabase authentication.' : 'Supabase keys are required for production login, resume upload, and admin access.'}</small></Card></section></motion.div>;
 }
 
 function UserDashboard() {
@@ -359,7 +365,7 @@ function AdminDashboard() {
   useEffect(() => { loadAdminData(); }, []);
 
   const rows = useMemo(() => adminResumes.filter((row) => {
-    const text = ((row.user_name || '') + ' ' + (row.email || '') + ' ' + (row.status || '')).toLowerCase();
+    const text = ((row.user_name || row.email || '') + ' ' + (row.email || '') + ' ' + (row.status || '')).toLowerCase();
     return text.includes(query.toLowerCase()) && (filter === 'All' || row.status === filter);
   }), [adminResumes, query, filter]);
 
@@ -411,7 +417,7 @@ function AdminDashboard() {
   return <motion.div {...page} className="dashboard"><DashboardHeader title="Admin Dashboard" subtitle="Overview, users, resumes, contact messages, website statistics, and logout." />
     <div className="metric-grid">{metricCards.map(([label, value, Icon]) => <Card key={label}><Icon className="card-icon" /><strong>{value}</strong><span>{label}</span></Card>)}</div>
     <Card className="wide"><h2>Registered Users</h2>{adminUsers.length ? <div className="user-list">{adminUsers.map((user) => <div key={user.id}><span><strong>{user.name}</strong><small>{user.email} - {user.phone || 'No phone'}</small></span><span className="badge">{user.role}</span></div>)}</div> : <p className="empty-state">No users registered.</p>}</Card>
-    <Card className="wide"><div className="table-head"><h2>Uploaded Resumes</h2><div className="table-tools"><label><Search size={18}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search resumes" /></label><select value={filter} onChange={(e) => setFilter(e.target.value)}><option>All</option>{allStatuses.map((status) => <option key={status}>{status}</option>)}</select></div></div>{rows.length ? <div className="table">{rows.map((row) => <div key={row.id}><span><strong>{row.user_name}</strong><small>{row.email} - {new Date(row.uploaded_at).toLocaleString()}</small><small>{row.resume_file_name}</small></span><select value={row.status} onChange={(e) => updateStatus(row, e.target.value)}>{allStatuses.map((status) => <option key={status}>{status}</option>)}</select><button onClick={() => toast.message(row.user_name, { description: row.resume_file_name })}><Eye />View</button><button onClick={() => download(row)}><Download />Download</button></div>)}</div> : <p className="empty-state">No resumes uploaded yet.</p>}</Card>
+    <Card className="wide"><div className="table-head"><h2>Uploaded Resumes</h2><div className="table-tools"><label><Search size={18}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search resumes" /></label><select value={filter} onChange={(e) => setFilter(e.target.value)}><option>All</option>{allStatuses.map((status) => <option key={status}>{status}</option>)}</select></div></div>{rows.length ? <div className="table">{rows.map((row) => <div key={row.id}><span><strong>{row.user_name || row.email}</strong><small>{row.email} - {new Date(row.uploaded_at).toLocaleString()}</small><small>{row.resume_file_name}</small></span><select value={row.status} onChange={(e) => updateStatus(row, e.target.value)}>{allStatuses.map((status) => <option key={status}>{status}</option>)}</select><button onClick={() => toast.message(row.user_name || row.email, { description: row.resume_file_name })}><Eye />View</button><button onClick={() => download(row)}><Download />Download</button></div>)}</div> : <p className="empty-state">No resumes uploaded yet.</p>}</Card>
     <Card className="wide"><h2>Contact Messages</h2>{contactMessages.length ? <div className="message-list">{contactMessages.map((message) => <div key={message.id} className={message.is_read ? 'read-message' : ''}><span><strong>{message.subject}</strong><small>{message.name} - {message.email} - {new Date(message.created_at).toLocaleString()}</small></span><p>{message.message}</p><div><button className="secondary-btn" onClick={() => markMessage(message)}>{message.is_read ? 'Mark Unread' : 'Mark Read'}</button><button className="secondary-btn danger-text" onClick={() => removeMessage(message.id)}>Delete</button></div></div>)}</div> : <p className="empty-state">No contact messages received.</p>}</Card>
     <Card className="wide"><h2>Website Statistics</h2><ResponsiveContainer width="100%" height={260}><AreaChart data={[{ name: 'Users', value: stats.users }, { name: 'Resumes', value: stats.resumes }, { name: 'Messages', value: stats.messages }]}><CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,.25)"/><XAxis dataKey="name"/><YAxis allowDecimals={false}/><Tooltip/><Area type="monotone" dataKey="value" stroke="#00D4FF" fill="rgba(0,212,255,.18)"/></AreaChart></ResponsiveContainer></Card>
   </motion.div>;
