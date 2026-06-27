@@ -1,0 +1,13 @@
+<svg width="278" height="84" viewBox="0 0 278 84" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Techie Brains logo</title>
+  <desc id="desc">Techie Brains wordmark with a colorful human technology mark.</desc>
+  <text x="8" y="55" font-family="Segoe UI, Arial, sans-serif" font-size="33" font-weight="800" fill="#77D83A">Techie</text>
+  <text x="121" y="55" font-family="Segoe UI, Arial, sans-serif" font-size="33" font-weight="800" fill="#079A58">Brains</text>
+  <path d="M236 41c8-10 14-22 14-36 7 18 5 31-3 42l-11-6Z" fill="#00AEEF"/>
+  <path d="M244 43c16-6 25-17 27-32 5 20-6 34-23 42l-4-10Z" fill="#6BD12F"/>
+  <path d="M232 45c-14-3-23-11-27-24 12 9 21 12 33 11l-6 13Z" fill="#D3188D"/>
+  <path d="M225 48c-10 6-16 17-18 31 14-10 23-19 28-33l-10 2Z" fill="#FFF100"/>
+  <path d="M239 50c9 8 13 18 12 31 9-14 8-27-3-39l-9 8Z" fill="#78C943"/>
+  <circle cx="226" cy="34" r="6" fill="#F00090"/>
+  <circle cx="251" cy="22" r="7" fill="#00AEEF"/>
+</svg>
