@@ -324,35 +324,7 @@ export async function loginWithPassword({ email, password }) {
   return { session, profile };
 }
 
-export async function loginWithGoogle() {
-  if (isRealSupabase) {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin + '/dashboard'
-      }
-    });
-    if (error) throw error;
-    return data;
-  }
 
-  const id = 'google-mock-user-id';
-  const email = 'google.user@example.com';
-  const name = 'Google User';
-  const role = 'User';
-  
-  const users = getMockUsers();
-  if (!users.some(u => u.id === id)) {
-    users.push({ id, email, password: '', name, phone: '', role });
-    localStorage.setItem('tb-mock-users', JSON.stringify(users));
-  }
-
-  const profile = await getProfile(id) || await upsertProfile({ id, name, email, phone: '', role });
-  const token = generateMockJWT({ id, email, name, phone: '', role });
-  setCookie('jwt_token', token, 7);
-
-  window.location.href = window.location.origin + '/dashboard';
-}
 
 export async function saveContactMessage(values) {
   const payload = {
