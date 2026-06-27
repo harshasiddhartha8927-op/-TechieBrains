@@ -112,6 +112,20 @@ function Shell() {
 
 function Protected({ children, role }) {
   const { session, profile } = useAppStore();
+  const isRedirect = window.location.hash.includes('access_token=') || window.location.hash.includes('id_token=');
+
+  if (isRedirect && !session) {
+    return (
+      <div className="section" style={{ minHeight: '80vh', display: 'grid', placeItems: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <ShieldCheck size={48} className="spin" style={{ color: '#00D4FF', marginBottom: '16px' }} />
+          <h2>Signing in with Google...</h2>
+          <p style={{ color: 'var(--text-muted)' }}>Please wait while we verify your credentials.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!session) return <Navigate to="/login" replace />;
   if (role && profile?.role !== role) return <Navigate to="/dashboard" replace />;
   return children;
@@ -251,9 +265,15 @@ function AdminSetup() {
 function Login() {
   const navigate = useNavigate();
   const { register, handleSubmit } = useForm();
-  const { setAuth } = useAppStore();
+  const { setAuth, session, profile } = useAppStore();
   const [mode, setMode] = useState('login');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (session && profile) {
+      navigate(profile.role === 'Admin' ? '/admin' : '/dashboard', { replace: true });
+    }
+  }, [session, profile, navigate]);
 
   const submit = async (values) => {
     setBusy(true);
