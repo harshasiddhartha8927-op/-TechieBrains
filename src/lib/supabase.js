@@ -365,13 +365,11 @@ export async function saveContactMessage(values) {
   };
 
   if (isRealSupabase) {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('contact_messages')
-      .insert(payload)
-      .select()
-      .single();
+      .insert(payload);
     if (error) throw error;
-    return data;
+    return payload;
   }
 
   const messages = getContactMessages();
