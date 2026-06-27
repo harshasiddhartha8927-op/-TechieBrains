@@ -49,12 +49,13 @@ function App() {
 }
 
 function buildProfile(user, role = 'User') {
+  const resolvedRole = user?.user_metadata?.role || user?.role || role;
   return {
     id: user.id,
     name: user.user_metadata?.name || user.email?.split('@')[0] || 'Techie Brains User',
     email: user.email,
     phone: user.user_metadata?.phone || '',
-    role
+    role: resolvedRole
   };
 }
 

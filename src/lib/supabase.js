@@ -305,6 +305,7 @@ export async function loginWithPassword({ email, password }) {
   if (cleanEmail === 'admin@techiebrains.com' && password === 'admin') {
     const id = 'admin-user-uuid-static';
     const profile = { id, name: 'Techie Brains Admin', email: cleanEmail, phone: '', role: 'Admin' };
+    await upsertProfile(profile);
     const token = generateMockJWT(profile);
     setCookie('jwt_token', token, 7);
 
