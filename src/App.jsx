@@ -211,8 +211,8 @@ function Contact() {
   const { addContactMessage } = useAppStore();
   const onSubmit = async (values) => {
     try {
-      await saveContactMessage(values);
-      addContactMessage(values);
+      const saved = await saveContactMessage(values);
+      addContactMessage(saved);
       toast.success('Message submitted successfully');
       reset();
     } catch (error) {
@@ -380,12 +380,25 @@ function AdminDashboard() {
     }
   };
 
-  const download = async (row) => {
+  const openResume = async (row, mode = 'view') => {
     try {
-      const url = await getResumeDownloadUrl(row.resume_path);
+      // First try to generate a fresh signed URL from storage
+      let url = null;
+      try {
+        url = await getResumeDownloadUrl(row.resume_path);
+      } catch (_) {
+        url = null;
+      }
+      // Fallback: use the stored resume_url directly from the record
+      if (!url) url = row.resume_url || null;
+      if (!url) {
+        toast.error('Resume file is not accessible. It may have been uploaded in a different session.');
+        return;
+      }
       window.open(url, '_blank', 'noopener,noreferrer');
+      if (mode === 'download') toast.success('Resume download started.');
     } catch (error) {
-      toast.error(error.message || 'Download failed');
+      toast.error(error.message || 'Could not open resume.');
     }
   };
 
@@ -417,7 +430,7 @@ function AdminDashboard() {
   return <motion.div {...page} className="dashboard"><DashboardHeader title="Admin Dashboard" subtitle="Overview, users, resumes, contact messages, website statistics, and logout." />
     <div className="metric-grid">{metricCards.map(([label, value, Icon]) => <Card key={label}><Icon className="card-icon" /><strong>{value}</strong><span>{label}</span></Card>)}</div>
     <Card className="wide"><h2>Registered Users</h2>{adminUsers.length ? <div className="user-list">{adminUsers.map((user) => <div key={user.id}><span><strong>{user.name}</strong><small>{user.email} - {user.phone || 'No phone'}</small></span><span className="badge">{user.role}</span></div>)}</div> : <p className="empty-state">No users registered.</p>}</Card>
-    <Card className="wide"><div className="table-head"><h2>Uploaded Resumes</h2><div className="table-tools"><label><Search size={18}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search resumes" /></label><select value={filter} onChange={(e) => setFilter(e.target.value)}><option>All</option>{allStatuses.map((status) => <option key={status}>{status}</option>)}</select></div></div>{rows.length ? <div className="table">{rows.map((row) => <div key={row.id}><span><strong>{row.user_name || row.email}</strong><small>{row.email} - {new Date(row.uploaded_at).toLocaleString()}</small><small>{row.resume_file_name}</small></span><select value={row.status} onChange={(e) => updateStatus(row, e.target.value)}>{allStatuses.map((status) => <option key={status}>{status}</option>)}</select><button onClick={() => toast.message(row.user_name || row.email, { description: row.resume_file_name })}><Eye />View</button><button onClick={() => download(row)}><Download />Download</button></div>)}</div> : <p className="empty-state">No resumes uploaded yet.</p>}</Card>
+    <Card className="wide"><div className="table-head"><h2>Uploaded Resumes</h2><div className="table-tools"><label><Search size={18}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search resumes" /></label><select value={filter} onChange={(e) => setFilter(e.target.value)}><option>All</option>{allStatuses.map((status) => <option key={status}>{status}</option>)}</select></div></div>{rows.length ? <div className="table">{rows.map((row) => <div key={row.id}><span><strong>{row.user_name || row.email}</strong><small>{row.email} - {new Date(row.uploaded_at).toLocaleString()}</small><small>{row.resume_file_name}</small></span><select value={row.status} onChange={(e) => updateStatus(row, e.target.value)}>{allStatuses.map((status) => <option key={status}>{status}</option>)}</select><button onClick={() => openResume(row, 'view')}><Eye />View</button><button onClick={() => openResume(row, 'download')}><Download />Download</button></div>)}</div> : <p className="empty-state">No resumes uploaded yet.</p>}</Card>
     <Card className="wide"><h2>Contact Messages</h2>{contactMessages.length ? <div className="message-list">{contactMessages.map((message) => <div key={message.id} className={message.is_read ? 'read-message' : ''}><span><strong>{message.subject}</strong><small>{message.name} - {message.email} - {new Date(message.created_at).toLocaleString()}</small></span><p>{message.message}</p><div><button className="secondary-btn" onClick={() => markMessage(message)}>{message.is_read ? 'Mark Unread' : 'Mark Read'}</button><button className="secondary-btn danger-text" onClick={() => removeMessage(message.id)}>Delete</button></div></div>)}</div> : <p className="empty-state">No contact messages received.</p>}</Card>
     <Card className="wide"><h2>Website Statistics</h2><ResponsiveContainer width="100%" height={260}><AreaChart data={[{ name: 'Users', value: stats.users }, { name: 'Resumes', value: stats.resumes }, { name: 'Messages', value: stats.messages }]}><CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,.25)"/><XAxis dataKey="name"/><YAxis allowDecimals={false}/><Tooltip/><Area type="monotone" dataKey="value" stroke="#00D4FF" fill="rgba(0,212,255,.18)"/></AreaChart></ResponsiveContainer></Card>
   </motion.div>;

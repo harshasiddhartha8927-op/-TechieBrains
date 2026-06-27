@@ -47,7 +47,13 @@ export const useAppStore = create((set, get) => ({
     set({ contactMessages });
   },
   addContactMessage: (message) => set((state) => {
-    const contactMessages = [{ id: Date.now(), is_read: false, created_at: new Date().toISOString(), ...message }, ...state.contactMessages];
+    const entry = {
+      id: message.id ?? Date.now(),
+      is_read: false,
+      created_at: message.created_at ?? new Date().toISOString(),
+      ...message
+    };
+    const contactMessages = [entry, ...state.contactMessages];
     writeJson('tb-contact-messages', contactMessages);
     return { contactMessages };
   }),

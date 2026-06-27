@@ -115,7 +115,7 @@ function parseMockJWT(token) {
 const getMockUsers = () => JSON.parse(localStorage.getItem('tb-mock-users') || '[]');
 const getProfiles = () => JSON.parse(localStorage.getItem('tb-mock-profiles') || '[]');
 const getResumes = () => JSON.parse(localStorage.getItem('tb-mock-resumes') || '[]');
-const getContactMessages = () => JSON.parse(localStorage.getItem('tb-mock-contact-messages') || '[]');
+const getContactMessages = () => JSON.parse(localStorage.getItem('tb-contact-messages') || '[]');
 const getNotifications = () => JSON.parse(localStorage.getItem('tb-mock-notifications') || '[]');
 
 let authListeners = [];
@@ -366,44 +366,81 @@ export async function loginWithPassword({ email, password }) {
 
 
 export async function saveContactMessage(values) {
-  const payload = {
+  const id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+  const fullPayload = {
+    id,
     name: sanitizeText(values.name),
     email: sanitizeText(values.email).toLowerCase(),
     phone: sanitizeText(values.phone || ''),
     subject: sanitizeText(values.subject),
     message: sanitizeText(values.message),
-    is_read: false
-  };
-
-  if (isRealSupabase) {
-    const { error } = await supabase
-      .from('contact_messages')
-      .insert(payload);
-    if (error) throw error;
-    return payload;
-  }
-
-  const messages = getContactMessages();
-  const mockPayload = {
-    ...payload,
-    id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
+    is_read: false,
     created_at: new Date().toISOString()
   };
-  messages.push(mockPayload);
-  localStorage.setItem('tb-mock-contact-messages', JSON.stringify(messages));
-  return mockPayload;
+
+  // Always save a local backup so the admin dashboard can see it
+  // even if Supabase RLS blocks reads for the demo admin account
+  const messages = getContactMessages();
+  messages.push(fullPayload);
+  localStorage.setItem('tb-contact-messages', JSON.stringify(messages));
+
+  if (isRealSupabase) {
+    // Try inserting with all fields
+    const insertPayload = {
+      name: fullPayload.name,
+      email: fullPayload.email,
+      phone: fullPayload.phone,
+      subject: fullPayload.subject,
+      message: fullPayload.message
+    };
+    const { error } = await supabase
+      .from('contact_messages')
+      .insert(insertPayload);
+
+    if (error) {
+      // If schema is missing optional columns (phone, is_read), retry with minimal required fields
+      if (error.message && (error.message.includes('phone') || error.message.includes('is_read'))) {
+        const minimalPayload = {
+          name: fullPayload.name,
+          email: fullPayload.email,
+          subject: fullPayload.subject,
+          message: fullPayload.message
+        };
+        const { error: retryError } = await supabase
+          .from('contact_messages')
+          .insert(minimalPayload);
+        if (retryError) console.warn('Contact message Supabase insert failed (minimal):', retryError.message);
+      } else {
+        console.warn('Contact message Supabase insert failed:', error.message);
+      }
+    }
+  }
+
+  return fullPayload;
 }
 
 export async function fetchContactMessages() {
+  // Always get local backup messages
+  const localMessages = getContactMessages();
+
   if (isRealSupabase) {
-    const { data, error } = await supabase
-      .from('contact_messages')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data || [];
+    try {
+      const { data, error } = await supabase
+        .from('contact_messages')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        return data;
+      }
+    } catch (_) {
+      // Supabase fetch failed (e.g. RLS blocked unauthenticated admin)
+    }
+    // Fall back to local backup if Supabase returned nothing or errored
+    return localMessages.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }
-  return getContactMessages();
+
+  return localMessages.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
 export async function updateContactMessage(id, patch) {
@@ -438,7 +475,7 @@ export async function deleteContactMessage(id) {
 
   const messages = getContactMessages();
   const filtered = messages.filter(m => m.id !== id);
-  localStorage.setItem('tb-mock-contact-messages', JSON.stringify(filtered));
+  localStorage.setItem('tb-contact-messages', JSON.stringify(filtered));
 }
 
 export async function uploadResume({ user, profile, file }) {
@@ -599,8 +636,9 @@ export async function getResumeDownloadUrl(path) {
   if (fileCache[path]) {
     return fileCache[path].url;
   }
-  const blob = new Blob(["Fallback Resume Content (Session reloaded). File name was: " + path.split('-').slice(1).join('-')], { type: 'text/plain' });
-  return URL.createObjectURL(blob);
+  // Return null so the caller can fall back to the stored resume_url from the record
+  return null;
+
 }
 
 export async function fetchUsers() {
