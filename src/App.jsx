@@ -240,6 +240,17 @@ function Login() {
   const submit = async (values) => {
     setBusy(true);
     try {
+      // Allow hardcoded admin login to bypass Supabase check
+      const isAdminLogin = values.email?.toLowerCase().trim() === 'admin@techiebrains.com' && values.password === 'admin';
+
+      if (mode === 'login' && isAdminLogin) {
+        const result = await loginWithPassword(values);
+        setAuth(result);
+        toast.success('Admin signed in');
+        navigate('/admin');
+        return;
+      }
+
       if (!supabaseConfigured) throw new Error('Authentication service is not connected. Configure Supabase before client delivery.');
       if (mode === 'register') {
         await registerUser(values);
