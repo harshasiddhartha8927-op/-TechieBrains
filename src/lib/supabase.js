@@ -292,6 +292,72 @@ export async function registerUser(values) {
 export async function loginWithPassword({ email, password }) {
   const cleanEmail = sanitizeText(email).toLowerCase();
 
+  // Hardcoded Admin Credentials
+  if (cleanEmail === 'admin@techiebrains.com' && password === 'admin') {
+    if (isRealSupabase) {
+      try {
+        let authRes;
+        // Try logging in first
+        const loginRes = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password
+        });
+        
+        if (loginRes.error) {
+          // If login fails (user does not exist), register them automatically
+          const registerRes = await supabase.auth.signUp({
+            email: cleanEmail,
+            password,
+            options: {
+              data: {
+                name: 'Techie Brains Admin',
+                role: 'Admin'
+              }
+            }
+          });
+          if (registerRes.error) throw registerRes.error;
+          authRes = registerRes.data;
+        } else {
+          authRes = loginRes.data;
+        }
+
+        // Upsert admin profile to database
+        let profile = await getProfile(authRes.user.id).catch(() => null);
+        if (!profile) {
+          profile = await upsertProfile({
+            id: authRes.user.id,
+            name: 'Techie Brains Admin',
+            email: cleanEmail,
+            phone: '',
+            role: 'Admin'
+          });
+        }
+        
+        return { session: authRes.session, profile };
+      } catch (err) {
+        console.error('Supabase Admin auth failed, falling back to mock session:', err);
+      }
+    }
+
+    // Mock session fallback (if Supabase is unconfigured or offline)
+    const id = 'admin-user-uuid-static';
+    const profile = { id, name: 'Techie Brains Admin', email: cleanEmail, phone: '', role: 'Admin' };
+    const token = generateMockJWT(profile);
+    setCookie('jwt_token', token, 7);
+
+    const session = {
+      access_token: token,
+      user: {
+        id,
+        email: cleanEmail,
+        user_metadata: { name: 'Techie Brains Admin', phone: '', role: 'Admin' }
+      }
+    };
+
+    notifyAuthListeners('SIGNED_IN', session);
+    return { session, profile };
+  }
+
   if (isRealSupabase) {
     const { data, error } = await supabase.auth.signInWithPassword({
       email: cleanEmail,

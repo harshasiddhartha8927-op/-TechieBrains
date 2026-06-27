@@ -32,7 +32,13 @@ function App() {
       setAuth({ session: data.session, profile });
     });
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!session?.user) return setAuth({ session: null, profile: null });
+      if (!session?.user) {
+        // Don't wipe mock/hardcoded sessions — only clear if there's no active mock session
+        const current = useAppStore.getState();
+        const isMockSession = current.session?.access_token?.endsWith(btoa('mock_signature'));
+        if (current.session && isMockSession) return;
+        return setAuth({ session: null, profile: null });
+      }
       let profile = await getProfile(session.user.id).catch(() => null);
       if (!profile) profile = await upsertProfile(buildProfile(session.user)).catch(() => buildProfile(session.user));
       setAuth({ session, profile });
@@ -63,7 +69,6 @@ function Layout() {
     <Route path="/contact" element={<Contact />} />
     <Route path="/login" element={<Login />} />
     <Route path="/dashboard" element={<Protected><UserDashboard /></Protected>} />
-    <Route path="/admin/setup" element={<AdminSetup />} />
     <Route path="/admin" element={<Protected role="Admin"><AdminDashboard /></Protected>} />
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes></AnimatePresence></main><Footer /></>;
@@ -87,8 +92,10 @@ function Shell() {
     setQuery('');
   };
   const handleLogout = async () => {
-    if (supabase) await supabase.auth.signOut();
+    // Clear mock session cookie first
+    document.cookie = 'jwt_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     logout();
+    if (supabase) await supabase.auth.signOut().catch(() => {});
     toast.success('Logged out');
     navigate('/');
   };
@@ -217,51 +224,6 @@ function Contact() {
   </motion.div>;
 }
 
-function AdminSetup() {
-  const navigate = useNavigate();
-  const { register, handleSubmit } = useForm();
-  const { setAuth } = useAppStore();
-  const [checking, setChecking] = useState(true);
-  const [exists, setExists] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!supabaseConfigured) {
-      setChecking(false);
-      return;
-    }
-    adminExists().then((value) => {
-      setExists(value);
-      if (value) navigate('/login', { replace: true });
-    }).catch((error) => toast.error(error.message)).finally(() => setChecking(false));
-  }, [navigate]);
-
-  const submit = async (values) => {
-    setBusy(true);
-    try {
-      const result = await createAdminAccount(values);
-      if (result.session) {
-        setAuth(result);
-        toast.success('Admin account created');
-        navigate('/admin');
-      } else {
-        toast.success('Admin account created. Please verify email, then login.');
-        navigate('/login');
-      }
-    } catch (error) {
-      toast.error(error.message || 'Could not create admin account');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!supabaseConfigured) return <motion.div {...page}><section className="auth-wrap"><Card className="auth-card"><img src="/techiebrains-logo.png" alt="Techie Brains" /><h1>Connect Supabase</h1><p className="auth-intro">Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env, run the SQL schema, then refresh this page to create the first admin account.</p></Card></section></motion.div>;
-  if (checking) return <motion.div {...page}><section className="auth-wrap"><Card className="auth-card"><h1>Checking admin setup...</h1></Card></section></motion.div>;
-  if (exists) return null;
-
-  return <motion.div {...page}><section className="auth-wrap"><Card className="auth-card"><img src="/techiebrains-logo.png" alt="Techie Brains" /><span className="pill"><Lock size={15} />First Launch</span><h1>Create Admin Account</h1><p className="auth-intro">Only one admin account can be created. After this step, admin registration is locked and future admins must use Admin Login.</p><form className="form" onSubmit={handleSubmit(submit)}><input {...register('name', { required: true })} placeholder="Admin name" /><input type="email" {...register('email', { required: true })} placeholder="Admin email" /><input type="password" {...register('password', { required: true, minLength: 8 })} placeholder="Admin password" /><button className="gradient-btn" disabled={busy}>{busy ? 'Creating...' : 'Create Admin Account'}</button></form><div className="auth-links"><button onClick={() => navigate('/login')}>Admin Login</button></div></Card></section></motion.div>;
-}
-
 function Login() {
   const navigate = useNavigate();
   const { register, handleSubmit } = useForm();
@@ -279,23 +241,15 @@ function Login() {
     setBusy(true);
     try {
       if (!supabaseConfigured) throw new Error('Authentication service is not connected. Configure Supabase before client delivery.');
-      if (mode === 'forgot') {
-        const { error } = await supabase.auth.resetPasswordForEmail(values.email, { redirectTo: window.location.origin + '/login' });
-        if (error) throw error;
-        toast.success('Password reset link sent');
-        return;
-      }
       if (mode === 'register') {
         await registerUser(values);
-        toast.success('Registration successful. Please verify email if confirmation is enabled.');
+        toast.success('Registration successful. Please login now.');
         setMode('login');
         return;
       }
       const result = await loginWithPassword(values);
-      if (mode === 'admin' && result.profile.role !== 'Admin') throw new Error('This account does not have admin access.');
-      if (mode !== 'admin' && result.profile.role === 'Admin') throw new Error('Please use Admin Login for this account.');
       setAuth(result);
-      toast.success(mode === 'admin' ? 'Admin signed in' : 'Welcome back');
+      toast.success(result.profile.role === 'Admin' ? 'Admin signed in' : 'Welcome back');
       navigate(result.profile.role === 'Admin' ? '/admin' : '/dashboard');
     } catch (error) {
       toast.error(error.message || 'Authentication failed');
@@ -304,7 +258,7 @@ function Login() {
     }
   };
 
-  return <motion.div {...page}><section className="auth-wrap"><Card className="auth-card"><img src="/techiebrains-logo.png" alt="Techie Brains" /><span className="pill"><Lock size={15} />Secure Access</span><h1>{mode === 'login' ? 'User Login' : mode === 'register' ? 'Create candidate account' : mode === 'admin' ? 'Admin Login' : 'Reset password'}</h1><p className="auth-intro">Users and administrators sign in separately. Admin registration is available only on first launch.</p><form className="form" onSubmit={handleSubmit(submit)}>{mode === 'register' && <><input {...register('name', { required: true })} placeholder="Full name" /><input {...register('phone')} placeholder="Phone" /></>}<input type="email" {...register('email', { required: true })} placeholder={mode === 'admin' ? 'Admin email' : 'Email'} />{mode !== 'forgot' && <input type="password" {...register('password', { required: true, minLength: mode === 'register' ? 8 : 6 })} placeholder={mode === 'admin' ? 'Admin password' : 'Password'} />}<label className="check"><input type="checkbox" />Remember me</label><button className="gradient-btn" disabled={busy}>{busy ? 'Please wait...' : mode === 'forgot' ? 'Send Reset Link' : mode === 'admin' ? 'Login as Admin' : mode === 'register' ? 'Register' : 'Login'}</button></form><div className="auth-links"><button onClick={() => setMode('login')}>User Login</button><button onClick={() => setMode('register')}>Register</button><button onClick={() => setMode('forgot')}>Forgot Password</button><button onClick={() => setMode('admin')}>Admin Login</button><button onClick={() => navigate('/admin/setup')}>Create Admin</button></div><small>{supabaseConfigured ? 'Connected to Supabase authentication.' : 'Supabase keys are required for production login, resume upload, and admin access.'}</small></Card></section></motion.div>;
+  return <motion.div {...page}><section className="auth-wrap"><Card className="auth-card"><img src="/techiebrains-logo.png" alt="Techie Brains" /><span className="pill"><Lock size={15} />Secure Access</span><h1>{mode === 'login' ? 'Account Login' : 'Create candidate account'}</h1><p className="auth-intro">{mode === 'login' ? 'Enter your credentials to access your dashboard.' : 'Register your candidate account to start uploading resumes and tracking applications.'}</p><form className="form" onSubmit={handleSubmit(submit)}>{mode === 'register' && <><input {...register('name', { required: true })} placeholder="Full name" /><input {...register('phone')} placeholder="Phone" /></>}<input type="email" {...register('email', { required: true })} placeholder="Email" /><input type="password" {...register('password', { required: true, minLength: mode === 'register' ? 8 : 6 })} placeholder="Password" /><label className="check"><input type="checkbox" />Remember me</label><button className="gradient-btn" disabled={busy}>{busy ? 'Please wait...' : mode === 'register' ? 'Register' : 'Login'}</button></form><div className="auth-links" style={{ justifyContent: 'center', marginTop: '24px' }}>{mode === 'login' ? <p style={{ color: 'var(--muted)', margin: 0 }}>Don't have an account? <button type="button" onClick={() => setMode('register')} style={{ display: 'inline', padding: 0, border: 0, background: 'transparent', color: 'var(--accent)', fontWeight: 900, cursor: 'pointer' }}>Create Account</button></p> : <p style={{ color: 'var(--muted)', margin: 0 }}>Already have an account? <button type="button" onClick={() => setMode('login')} style={{ display: 'inline', padding: 0, border: 0, background: 'transparent', color: 'var(--accent)', fontWeight: 900, cursor: 'pointer' }}>Login</button></p>}</div><small>{supabaseConfigured ? 'Connected to Supabase authentication.' : 'Supabase keys are required for production login, resume upload, and admin access.'}</small></Card></section></motion.div>;
 }
 
 function UserDashboard() {
