@@ -22,6 +22,10 @@ export const useAppStore = create((set, get) => ({
     set({ session, profile });
   },
   logout: () => get().setAuth({ session: null, profile: null }),
+  setNotifications: (notifications) => {
+    writeJson('tb-notifications', notifications);
+    set({ notifications });
+  },
   setProfile: (profile) => {
     writeJson('tb-profile', profile);
     set({ profile });

@@ -653,3 +653,36 @@ export async function fetchStats() {
     pending
   };
 }
+
+export async function fetchNotifications(userId) {
+  if (!userId) return [];
+  if (isRealSupabase) {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+  return getNotifications().filter(n => n.user_id === userId);
+}
+
+export async function markNotificationAsRead(id) {
+  if (isRealSupabase) {
+    const { data, error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+  const notifications = getNotifications();
+  const idx = notifications.findIndex(n => n.id === id);
+  if (idx > -1) {
+    notifications[idx].is_read = true;
+    localStorage.setItem('tb-mock-notifications', JSON.stringify(notifications));
+  }
+}

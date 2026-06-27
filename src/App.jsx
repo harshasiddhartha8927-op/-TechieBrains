@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { navLinks, stats, whyChoose, partnerships, staffingServices, consultingServices, testimonials, faqs, adminMetrics, chartData, techStack } from './data/content';
-import { adminExists, allStatuses, createAdminAccount, deleteContactMessage as deleteContactMessageDb, fetchContactMessages, fetchResumes, fetchStats, fetchUserResume, fetchUsers, getProfile, getResumeDownloadUrl, loginWithGoogle, loginWithPassword, progressStatuses, registerUser, saveContactMessage, supabase, supabaseConfigured, updateContactMessage, updateResumeStatus, uploadResume, upsertProfile } from './lib/supabase';
+import { adminExists, allStatuses, createAdminAccount, deleteContactMessage as deleteContactMessageDb, fetchContactMessages, fetchNotifications, fetchResumes, fetchStats, fetchUserResume, fetchUsers, getProfile, getResumeDownloadUrl, loginWithGoogle, loginWithPassword, markNotificationAsRead, progressStatuses, registerUser, saveContactMessage, supabase, supabaseConfigured, updateContactMessage, updateResumeStatus, uploadResume, upsertProfile } from './lib/supabase';
 import { useAppStore } from './store/useAppStore';
 
 const page = { initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -18 }, transition: { duration: 0.35 } };
@@ -317,7 +317,7 @@ function Login() {
 }
 
 function UserDashboard() {
-  const { profile, resume, setResume, notifications, markNotificationRead, setProfile } = useAppStore();
+  const { profile, resume, setResume, notifications, setNotifications, markNotificationRead, setProfile } = useAppStore();
   const [uploading, setUploading] = useState(false);
   const { register, handleSubmit } = useForm({ defaultValues: profile || {} });
   const progress = resume?.status === 'Rejected' ? -1 : progressStatuses.indexOf(resume?.status || 'Pending');
@@ -325,7 +325,17 @@ function UserDashboard() {
   useEffect(() => {
     if (!profile?.id || !supabaseConfigured) return;
     fetchUserResume(profile.id).then((data) => data && setResume(data)).catch((error) => toast.error(error.message));
-  }, [profile?.id, setResume]);
+    fetchNotifications(profile.id).then((data) => setNotifications(data)).catch((error) => console.error(error));
+  }, [profile?.id, setResume, setNotifications]);
+
+  const handleMarkRead = async (id) => {
+    try {
+      await markNotificationAsRead(id);
+      markNotificationRead(id);
+    } catch (error) {
+      toast.error(error.message || 'Could not update notification');
+    }
+  };
 
   const handleFile = async (event) => {
     const file = event.target.files?.[0];
@@ -365,7 +375,7 @@ function UserDashboard() {
   };
 
   return <motion.div {...page} className="dashboard"><DashboardHeader title="User Dashboard" subtitle="Manage your profile, resume, notifications, and application status." />
-    <div className="dashboard-grid"><Card><User className="card-icon" /><h3>{profile?.name}</h3><p>{profile?.email}</p><p>{profile?.phone || 'Phone not added'}</p></Card><Card><FileUp className="card-icon" /><h3>Resume Upload</h3><label className="upload"><input type="file" accept=".pdf,.doc,.docx" onChange={handleFile} />{uploading ? 'Uploading...' : 'Upload PDF, DOC, DOCX'}</label>{resume ? <p>{resume.resume_file_name || resume.fileName}</p> : <p>No resume uploaded yet.</p>}</Card><Card><Bell className="card-icon" /><h3>Notifications</h3>{notifications.length ? notifications.map((item) => <button className={'notice ' + (item.is_read ? 'read' : '')} key={item.id} onClick={() => markNotificationRead(item.id)}><strong>{item.title}</strong><span>{item.message}</span></button>) : <p>No notifications yet.</p>}</Card></div>
+    <div className="dashboard-grid"><Card><User className="card-icon" /><h3>{profile?.name}</h3><p>{profile?.email}</p><p>{profile?.phone || 'Phone not added'}</p></Card><Card><FileUp className="card-icon" /><h3>Resume Upload</h3><label className="upload"><input type="file" accept=".pdf,.doc,.docx" onChange={handleFile} />{uploading ? 'Uploading...' : 'Upload PDF, DOC, DOCX'}</label>{resume ? <p>{resume.resume_file_name || resume.fileName}</p> : <p>No resume uploaded yet.</p>}</Card><Card><Bell className="card-icon" /><h3>Notifications</h3>{notifications.length ? notifications.map((item) => <button className={'notice ' + (item.is_read ? 'read' : '')} key={item.id} onClick={() => handleMarkRead(item.id)}><strong>{item.title}</strong><span>{item.message}</span></button>) : <p>No notifications yet.</p>}</Card></div>
     <Card className="wide"><h2>Application Status</h2>{resume ? <><div className="status-line">{progressStatuses.map((step, index) => <div className={index <= progress ? 'done' : ''} key={step}><span>{index + 1}</span><p>{step}</p></div>)}</div><p className={'badge status-' + resume.status.toLowerCase().replaceAll(' ', '-')}>Current: {resume.status}</p><p>{resume.remarks || 'Your application will update as the admin reviews your resume.'}</p></> : <p className="empty-state">Upload a resume to start tracking your application status.</p>}</Card>
     <Card className="wide"><h2>Account Settings</h2><form className="form settings-form" onSubmit={handleSubmit(saveProfile)}><input {...register('name', { required: true })} placeholder="Name" /><input type="email" {...register('email', { required: true })} placeholder="Email" /><input {...register('phone')} placeholder="Phone" /><button className="gradient-btn">Save Profile</button></form></Card>
   </motion.div>;
