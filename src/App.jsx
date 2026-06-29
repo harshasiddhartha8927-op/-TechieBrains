@@ -49,12 +49,13 @@ function App() {
 }
 
 function buildProfile(user, role = 'User') {
+  const resolvedRole = user?.user_metadata?.role || user?.role || role;
   return {
     id: user.id,
     name: user.user_metadata?.name || user.email?.split('@')[0] || 'Techie Brains User',
     email: user.email,
     phone: user.user_metadata?.phone || '',
-    role
+    role: resolvedRole
   };
 }
 
@@ -382,20 +383,29 @@ function AdminDashboard() {
 
   const openResume = async (row, mode = 'view') => {
     try {
-      // First try to generate a fresh signed URL from storage
       let url = null;
       try {
         url = await getResumeDownloadUrl(row.resume_path);
       } catch (_) {
         url = null;
       }
-      // Fallback: use the stored resume_url directly from the record
       if (!url) url = row.resume_url || null;
       if (!url) {
         toast.error('Resume file is not accessible. It may have been uploaded in a different session.');
         return;
       }
-      window.open(url, '_blank', 'noopener,noreferrer');
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener,noreferrer';
+      if (mode === 'download') {
+        link.download = row.resume_file_name || 'resume';
+      }
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
       if (mode === 'download') toast.success('Resume download started.');
     } catch (error) {
       toast.error(error.message || 'Could not open resume.');
